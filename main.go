@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/yankeguo/rg"
@@ -18,11 +20,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
-
-type NamespacedName struct {
-	Namespace string
-	Name      string
-}
 
 const (
 	ContainerIDPrefixContainerd = "containerd://"
@@ -53,21 +50,36 @@ func main() {
 	flag.DurationVar(&optInterval, "interval", 10*time.Minute, "the interval to refresh, set to 0 to run once")
 	flag.Parse()
 
-loop:
-	if err := once(); err != nil {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		chSig := make(chan os.Signal, 1)
+		signal.Notify(chSig, syscall.SIGILL, syscall.SIGTERM)
+
+		sig := <-chSig
+		log.Println("signal received:", sig.String())
+
+		cancel()
+	}()
+
+start:
+	if err := do(ctx); err != nil {
 		log.Println("execution failed:", err.Error())
 	}
 
 	if optInterval > 0 {
-		time.Sleep(optInterval)
-		goto loop
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(optInterval):
+			goto start
+		}
 	}
 }
 
-func once() (err error) {
+func do(ctx context.Context) (err error) {
 	defer rg.Guard(&err)
-
-	ctx := context.Background()
 
 	client := rg.Must(createKubernetesClient())
 
@@ -77,60 +89,66 @@ func once() (err error) {
 
 	log.Println("Found", len(entries), "entries in", dir)
 
-	containerIDs := rg.Must(listContainerIDs(ctx, client))
+	resultSet := NewResultSet()
 
-	log.Println("Found", len(containerIDs), "container IDs")
+	rg.Must0(setupResultSet(ctx, resultSet, client))
 
-	results := map[NamespacedName]int64{}
+	log.Println("Found", resultSet.Len(), "Pods")
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 
-		item, ok := containerIDs[entry.Name()]
+		localCID := entry.Name()
+		if !resultSet.HasCID(localCID) {
+			continue
+		}
+
+		log.Println("Calculating", localCID)
+
+		var size int64
+		calculateDiskUsage(&size, filepath.Join(dir, entry.Name()))
+
+		item, ok := resultSet.SaveUsage(localCID, size)
 		if !ok {
 			continue
 		}
 
-		log.Println("Calculating", item.Namespace+"/"+item.Name, ":", entry.Name())
-
-		var result int64
-		calculateDiskUsage(&result, filepath.Join(dir, entry.Name()))
-
-		if result == 0 {
+		total, complete := resultSet.GetUsage(item)
+		if !complete {
 			continue
 		}
 
-		results[item] += result
-	}
-
-	now := time.Now().Format(time.RFC3339)
-
-	for item, size := range results {
-		buf := rg.Must(json.Marshal(map[string]any{
-			"metadata": map[string]any{
-				"annotations": map[string]string{
-					KeyEphemeralStorage: humanReadableSize(size) + ":" + now,
-				},
-			},
-		}))
-
-		if _, err := client.CoreV1().Pods(item.Namespace).Patch(ctx, item.Name, types.MergePatchType, buf, metav1.PatchOptions{}); err != nil {
-			log.Println("Patch failed for", item.Namespace+"/"+item.Name, ":", err.Error())
+		if err := saveUsage(ctx, client, item, total); err != nil {
+			log.Println("Failed saving usage for", item.Namespace+"/"+item.Name, ":", err.Error())
 		}
+		log.Println("Saved usage for", item.Namespace+"/"+item.Name, ":", humanReadableSize(total))
 	}
 
 	return
 }
 
-func listContainerIDs(ctx context.Context, client *kubernetes.Clientset) (containerIDs map[string]NamespacedName, err error) {
+func saveUsage(ctx context.Context, client *kubernetes.Clientset, item NamespacedName, usage int64) (err error) {
 	defer rg.Guard(&err)
 
-	containerIDs = make(map[string]NamespacedName)
+	buf := rg.Must(json.Marshal(map[string]any{
+		"metadata": map[string]any{
+			"annotations": map[string]string{
+				KeyEphemeralStorage: humanReadableSize(usage) + ";" + time.Now().Format(time.RFC3339),
+			},
+		},
+	}))
+
+	rg.Must(client.CoreV1().Pods(item.Namespace).Patch(ctx, item.Name, types.MergePatchType, buf, metav1.PatchOptions{}))
+
+	return
+}
+
+func setupResultSet(ctx context.Context, recordSet *ResultSet, client *kubernetes.Clientset) (err error) {
+	defer rg.Guard(&err)
 
 	opts := metav1.ListOptions{}
-
 	if optNodeName != "" {
 		opts.FieldSelector = "spec.nodeName=" + optNodeName
 	}
@@ -138,14 +156,18 @@ func listContainerIDs(ctx context.Context, client *kubernetes.Clientset) (contai
 	for _, item := range rg.Must(client.CoreV1().Pods("").List(ctx, opts)).Items {
 		for _, container := range item.Status.ContainerStatuses {
 			if strings.HasPrefix(container.ContainerID, ContainerIDPrefixContainerd) {
-				containerID := strings.TrimPrefix(container.ContainerID, ContainerIDPrefixContainerd)
-				containerIDs[containerID] = NamespacedName{Namespace: item.Namespace, Name: item.Name}
+				recordSet.AddCID(
+					strings.TrimPrefix(container.ContainerID, ContainerIDPrefixContainerd),
+					NamespacedName{Namespace: item.Namespace, Name: item.Name},
+				)
 			}
 		}
 		for _, container := range item.Status.InitContainerStatuses {
 			if strings.HasPrefix(container.ContainerID, ContainerIDPrefixContainerd) {
-				containerID := strings.TrimPrefix(container.ContainerID, ContainerIDPrefixContainerd)
-				containerIDs[containerID] = NamespacedName{Namespace: item.Namespace, Name: item.Name}
+				recordSet.AddCID(
+					strings.TrimPrefix(container.ContainerID, ContainerIDPrefixContainerd),
+					NamespacedName{Namespace: item.Namespace, Name: item.Name},
+				)
 			}
 		}
 	}
