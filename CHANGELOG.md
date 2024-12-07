@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.1.1 - 2024-12-07
+#### Features
+- adjust default interval to 30m - (39f1490) - GUO YANKE
+
+- - -
+
 ## v0.1.0 - 2024-12-07
 #### Bug Fixes
 - logging - (7914602) - GUO YANKE
