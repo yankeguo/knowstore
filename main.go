@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -128,7 +127,7 @@ func do(ctx context.Context) (err error) {
 		if err := saveUsage(ctx, client, item, total); err != nil {
 			log.Println("Failed saving usage for", item.Namespace+"/"+item.Name, ":", err.Error())
 		} else {
-			log.Println("Saved usage for", item.Namespace+"/"+item.Name, ":", humanReadableSize(total))
+			log.Println("Saved usage for", item.Namespace+"/"+item.Name, ":", prettyDiskUsage(total))
 		}
 	}
 
@@ -142,7 +141,7 @@ func saveUsage(ctx context.Context, client *kubernetes.Clientset, item Namespace
 		"metadata": map[string]any{
 			"annotations": map[string]string{
 				KeyEphemeralStorageUsage:       strconv.FormatInt(usage, 10),
-				KeyEphemeralStorageUsagePretty: humanReadableSize(usage),
+				KeyEphemeralStorageUsagePretty: prettyDiskUsage(usage),
 				KeyEphemeralStorageUpdatedAt:   time.Now().Format(time.RFC3339),
 			},
 		},
@@ -195,45 +194,4 @@ func createKubernetesClient() (client *kubernetes.Clientset, err error) {
 	client = rg.Must(kubernetes.NewForConfig(config))
 
 	return
-}
-
-func calculateDiskUsage(out *int64, dir string) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return
-	}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			calculateDiskUsage(out, filepath.Join(dir, entry.Name()))
-		} else {
-			info, err := entry.Info()
-			if err != nil {
-				return
-			}
-			*out += info.Size()
-		}
-	}
-	return
-}
-
-func humanReadableSize(size int64) string {
-	const (
-		KB = 1024
-		MB = KB * 1024
-		GB = MB * 1024
-		TB = GB * 1024
-	)
-
-	switch {
-	case size >= TB:
-		return fmt.Sprintf("%.2fT", float64(size)/TB)
-	case size >= GB:
-		return fmt.Sprintf("%.2fG", float64(size)/GB)
-	case size >= MB:
-		return fmt.Sprintf("%.2fM", float64(size)/MB)
-	case size >= KB:
-		return fmt.Sprintf("%.2fK", float64(size)/KB)
-	default:
-		return fmt.Sprintf("%d", size)
-	}
 }
