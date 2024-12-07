@@ -1,0 +1,56 @@
+# ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: knowstore
+automountServiceAccountToken: true
+---
+# ClusterRole for list and update Pods
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: knowstore
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list", "get", "update", "patch"]
+---
+# ClusterRoleBinding for knowstore
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: knowstore
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: knowstore
+subjects:
+  - kind: ServiceAccount
+    name: knowstore
+    namespace: default
+---
+# DaemonSet
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: knowstore
+spec:
+  selector:
+    matchLabels:
+      name: knowstore
+  template:
+    metadata:
+      labels:
+        name: knowstore
+    spec:
+      serviceAccountName: knowstore
+      volumes:
+        - name: runcontainerd
+          hostPath: /run/containerd
+      containers:
+        - name: knowstore
+          image: yankeguo/knowstore:latest
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: runcontainerd
+              mountPath: /run/containerd
