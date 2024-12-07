@@ -69,6 +69,8 @@ func main() {
 start:
 	if err := do(ctx); err != nil {
 		log.Println("execution failed:", err.Error())
+	} else {
+		log.Println("execution succeeded")
 	}
 
 	if optInterval > 0 {
@@ -125,8 +127,9 @@ func do(ctx context.Context) (err error) {
 
 		if err := saveUsage(ctx, client, item, total); err != nil {
 			log.Println("Failed saving usage for", item.Namespace+"/"+item.Name, ":", err.Error())
+		} else {
+			log.Println("Saved usage for", item.Namespace+"/"+item.Name, ":", humanReadableSize(total))
 		}
-		log.Println("Saved usage for", item.Namespace+"/"+item.Name, ":", humanReadableSize(total))
 	}
 
 	return
