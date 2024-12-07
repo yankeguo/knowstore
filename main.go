@@ -104,23 +104,38 @@ func do(ctx context.Context) (err error) {
 			continue
 		}
 
-		localCID := entry.Name()
-		if !resultSet.HasCID(localCID) {
+		cid := entry.Name()
+		if !resultSet.HasCID(cid) {
 			continue
 		}
 
-		log.Println("Calculating", localCID)
+		log.Println("Calculating", cid)
 
 		var size int64
 		calculateDiskUsage(&size, filepath.Join(dir, entry.Name()))
 
-		item, ok := resultSet.SaveUsage(localCID, size)
+		item, ok := resultSet.SaveUsage(cid, size)
 		if !ok {
 			continue
 		}
 
 		total, complete := resultSet.GetUsage(item)
 		if !complete {
+			continue
+		}
+
+		if err := saveUsage(ctx, client, item, total); err != nil {
+			log.Println("Failed saving usage for", item.Namespace+"/"+item.Name, ":", err.Error())
+		} else {
+			log.Println("Saved usage for", item.Namespace+"/"+item.Name, ":", prettyDiskUsage(total))
+		}
+	}
+
+	// init containers may have already purged, so we have to save incomplete ones
+	for _, item := range resultSet.List() {
+		total, complete := resultSet.GetUsage(item)
+		if complete {
+			// ignore complete since we have saved it
 			continue
 		}
 

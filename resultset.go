@@ -63,3 +63,10 @@ func (rs *ResultSet) GetUsage(item NamespacedName) (total int64, complete bool) 
 	}
 	return
 }
+
+func (rs *ResultSet) List() (items []NamespacedName) {
+	for item := range rs.m {
+		items = append(items, item)
+	}
+	return
+}
