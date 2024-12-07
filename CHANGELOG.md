@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.1.3 - 2024-12-07
+#### Bug Fixes
+- save partials since init containers may purged - (3007772) - GUO YANKE
+
+- - -
+
 ## v0.1.2 - 2024-12-07
 #### Bug Fixes
 - ignore symbolic link - (fece30d) - GUO YANKE
