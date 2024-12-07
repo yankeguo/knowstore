@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -24,7 +25,9 @@ import (
 const (
 	ContainerIDPrefixContainerd = "containerd://"
 
-	KeyEphemeralStorage = "com.yankeguo.knowstore/ephemeral-storage"
+	KeyEphemeralStorageUsage       = "com.yankeguo.knowstore/ephemeral-storage.usage"
+	KeyEphemeralStorageUsagePretty = "com.yankeguo.knowstore/ephemeral-storage.usage-pretty"
+	KeyEphemeralStorageUpdatedAt   = "com.yankeguo.knowstore/ephemeral-storage.updated-at"
 )
 
 var (
@@ -135,7 +138,9 @@ func saveUsage(ctx context.Context, client *kubernetes.Clientset, item Namespace
 	buf := rg.Must(json.Marshal(map[string]any{
 		"metadata": map[string]any{
 			"annotations": map[string]string{
-				KeyEphemeralStorage: humanReadableSize(usage) + ";" + time.Now().Format(time.RFC3339),
+				KeyEphemeralStorageUsage:       strconv.FormatInt(usage, 10),
+				KeyEphemeralStorageUsagePretty: humanReadableSize(usage),
+				KeyEphemeralStorageUpdatedAt:   time.Now().Format(time.RFC3339),
 			},
 		},
 	}))
