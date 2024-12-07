@@ -75,7 +75,11 @@ func once() (err error) {
 
 	entries := rg.Must(os.ReadDir(dir))
 
+	log.Println("Found", len(entries), "entries in", dir)
+
 	containerIDs := rg.Must(listContainerIDs(ctx, client))
+
+	log.Println("Found", len(containerIDs), "container IDs")
 
 	results := map[NamespacedName]int64{}
 
@@ -89,7 +93,7 @@ func once() (err error) {
 			continue
 		}
 
-		log.Println("processing", item.Namespace+"/"+item.Name, ":", entry.Name())
+		log.Println("Calculating", item.Namespace+"/"+item.Name, ":", entry.Name())
 
 		var result int64
 		calculateDiskUsage(&result, filepath.Join(dir, entry.Name()))
@@ -113,7 +117,7 @@ func once() (err error) {
 		}))
 
 		if _, err := client.CoreV1().Pods(item.Namespace).Patch(ctx, item.Name, types.MergePatchType, buf, metav1.PatchOptions{}); err != nil {
-			log.Println("patch failed for", item.Namespace+"/"+item.Name, ":", err.Error())
+			log.Println("Patch failed for", item.Namespace+"/"+item.Name, ":", err.Error())
 		}
 	}
 
@@ -134,12 +138,14 @@ func listContainerIDs(ctx context.Context, client *kubernetes.Clientset) (contai
 	for _, item := range rg.Must(client.CoreV1().Pods("").List(ctx, opts)).Items {
 		for _, container := range item.Status.ContainerStatuses {
 			if strings.HasPrefix(container.ContainerID, ContainerIDPrefixContainerd) {
-				containerIDs[container.ContainerID] = NamespacedName{Namespace: item.Namespace, Name: item.Name}
+				containerID := strings.TrimPrefix(container.ContainerID, ContainerIDPrefixContainerd)
+				containerIDs[containerID] = NamespacedName{Namespace: item.Namespace, Name: item.Name}
 			}
 		}
 		for _, container := range item.Status.InitContainerStatuses {
 			if strings.HasPrefix(container.ContainerID, ContainerIDPrefixContainerd) {
-				containerIDs[container.ContainerID] = NamespacedName{Namespace: item.Namespace, Name: item.Name}
+				containerID := strings.TrimPrefix(container.ContainerID, ContainerIDPrefixContainerd)
+				containerIDs[containerID] = NamespacedName{Namespace: item.Namespace, Name: item.Name}
 			}
 		}
 	}
