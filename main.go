@@ -50,7 +50,7 @@ func defaultKubeconfig() string {
 func main() {
 	flag.StringVar(&optKubeconfig, "kubeconfig", defaultKubeconfig(), "the kubeconfig file, if empty, use in-cluster config")
 	flag.StringVar(&optContainerdStateDir, "containerd.state.dir", "/run/containerd", "the containerd state dir")
-	flag.DurationVar(&optInterval, "interval", 10*time.Minute, "the interval to refresh, set to 0 to run once")
+	flag.DurationVar(&optInterval, "interval", 30*time.Minute, "the interval to refresh, set to 0 to run once")
 	flag.Parse()
 
 	ctx, cancel := context.WithCancel(context.Background())
