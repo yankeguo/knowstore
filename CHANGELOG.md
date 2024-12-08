@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.1.5 - 2024-12-08
+#### Bug Fixes
+- fix support for overlay fs - (43fc91e) - GUO YANKE
+
+- - -
+
 ## v0.1.4 - 2024-12-08
 #### Features
 - add overlayfs detection and kernel fs skipping - (22e9af8) - GUO YANKE
