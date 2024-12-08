@@ -2,6 +2,13 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.1.4 - 2024-12-08
+#### Features
+- add overlayfs detection and kernel fs skipping - (22e9af8) - GUO YANKE
+- add warning when found size >1T - (542fbed) - GUO YANKE
+
+- - -
+
 ## v0.1.3 - 2024-12-07
 #### Bug Fixes
 - save partials since init containers may purged - (3007772) - GUO YANKE
