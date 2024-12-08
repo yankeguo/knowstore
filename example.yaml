@@ -11,9 +11,9 @@ kind: ClusterRole
 metadata:
   name: knowstore
 rules:
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["list", "get", "update", "patch"]
+  - apiGroups: [ "" ]
+    resources: [ "pods" ]
+    verbs: [ "list", "get", "update", "patch" ]
 ---
 # ClusterRoleBinding for knowstore
 apiVersion: rbac.authorization.k8s.io/v1
@@ -49,6 +49,10 @@ spec:
           hostPath:
             path: /run/containerd
             type: Directory
+        - name: varlibcontainerd
+          hostPath:
+            path: /var/lib/containerd
+            type: Directory
       containers:
         - name: knowstore
           image: yankeguo/knowstore:latest
@@ -61,3 +65,5 @@ spec:
           volumeMounts:
             - name: runcontainerd
               mountPath: /run/containerd
+            - name: varlibcontainerd
+              mountPath: /var/lib/containerd
