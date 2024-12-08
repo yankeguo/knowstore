@@ -30,10 +30,13 @@ const (
 )
 
 var (
-	optNodeName           = strings.TrimSpace(os.Getenv("NODE_NAME"))
-	optKubeconfig         string
-	optContainerdStateDir string
-	optInterval           time.Duration
+	optNodeName            = strings.TrimSpace(os.Getenv("NODE_NAME"))
+	optKubeconfig          string
+	optContainerdRootfs    string
+	optContainerdRootDir   string
+	optContainerdStateDir  string
+	optContainerdNamespace string
+	optInterval            time.Duration
 )
 
 func defaultKubeconfig() string {
@@ -48,7 +51,10 @@ func defaultKubeconfig() string {
 
 func main() {
 	flag.StringVar(&optKubeconfig, "kubeconfig", defaultKubeconfig(), "the kubeconfig file, if empty, use in-cluster config")
-	flag.StringVar(&optContainerdStateDir, "containerd.state.dir", "/run/containerd", "the containerd state dir")
+	flag.StringVar(&optContainerdRootfs, "containerd.rootfs", "/", "the rootfs for containerd")
+	flag.StringVar(&optContainerdRootDir, "containerd.root-dir", "/var/lib/containerd", "the root dir for containerd, relative to --containerd.rootfs")
+	flag.StringVar(&optContainerdStateDir, "containerd.state-dir", "/run/containerd", "the state dir for containerd, relative to --containerd.rootfs")
+	flag.StringVar(&optContainerdNamespace, "containerd.namespace", "k8s.io", "the namespace for containerd")
 	flag.DurationVar(&optInterval, "interval", 30*time.Minute, "the interval to refresh, set to 0 to run once")
 	flag.Parse()
 
@@ -85,15 +91,18 @@ start:
 func do(ctx context.Context) (err error) {
 	defer rg.Guard(&err)
 
-	du := NewDiskUsage()
+	an := NewAnalyzer(AnalyzerOptions{
+		Rootfs:    optContainerdRootfs,
+		RootDir:   optContainerdRootDir,
+		StateDir:  optContainerdStateDir,
+		Namespace: optContainerdNamespace,
+	})
 
 	client := rg.Must(createKubernetesClient())
 
-	dir := filepath.Join(optContainerdStateDir, "io.containerd.runtime.v2.task", "k8s.io")
+	taskIDs := rg.Must(an.ListTaskIDs())
 
-	entries := rg.Must(os.ReadDir(dir))
-
-	log.Println("Found", len(entries), "entries in", dir)
+	log.Println("Found", len(taskIDs), "Tasks")
 
 	resultSet := NewResultSet()
 
@@ -101,21 +110,16 @@ func do(ctx context.Context) (err error) {
 
 	log.Println("Found", resultSet.Len(), "Pods")
 
-	for _, entry := range entries {
-		if !entry.IsDir() {
+	for _, taskID := range taskIDs {
+		if !resultSet.HasCID(taskID) {
 			continue
 		}
 
-		cid := entry.Name()
-		if !resultSet.HasCID(cid) {
-			continue
-		}
+		log.Println("Calculating", taskID)
 
-		log.Println("Calculating", cid)
+		size := an.GetDiskUsage(taskID)
 
-		size := du.Calculate(filepath.Join(dir, entry.Name(), "rootfs"))
-
-		item, ok := resultSet.SaveUsage(cid, size)
+		item, ok := resultSet.SaveUsage(taskID, size)
 		if !ok {
 			continue
 		}
