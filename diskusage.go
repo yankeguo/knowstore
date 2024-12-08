@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 )
@@ -22,7 +23,11 @@ func calculateDiskUsage(out *int64, dir string) {
 		}
 
 		if stat.Mode().IsRegular() {
-			*out += stat.Size()
+			size := stat.Size()
+			if size > 1024*1024*1024*1024 {
+				log.Println("File size is too large:", fullname)
+			}
+			*out += size
 		} else if stat.Mode().IsDir() {
 			calculateDiskUsage(out, fullname)
 		}
