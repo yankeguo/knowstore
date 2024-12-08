@@ -85,6 +85,8 @@ start:
 func do(ctx context.Context) (err error) {
 	defer rg.Guard(&err)
 
+	du := NewDiskUsage()
+
 	client := rg.Must(createKubernetesClient())
 
 	dir := filepath.Join(optContainerdStateDir, "io.containerd.runtime.v2.task", "k8s.io")
@@ -111,8 +113,7 @@ func do(ctx context.Context) (err error) {
 
 		log.Println("Calculating", cid)
 
-		var size int64
-		calculateDiskUsage(&size, filepath.Join(dir, entry.Name()))
+		size := du.Calculate(filepath.Join(dir, entry.Name(), "rootfs"))
 
 		item, ok := resultSet.SaveUsage(cid, size)
 		if !ok {
@@ -127,7 +128,7 @@ func do(ctx context.Context) (err error) {
 		if err := saveUsage(ctx, client, item, total); err != nil {
 			log.Println("Failed saving usage for", item.Namespace+"/"+item.Name, ":", err.Error())
 		} else {
-			log.Println("Saved usage for", item.Namespace+"/"+item.Name, ":", prettyDiskUsage(total))
+			log.Println("Saved usage for", item.Namespace+"/"+item.Name, ":", formatDiskUsage(total))
 		}
 	}
 
@@ -142,7 +143,7 @@ func do(ctx context.Context) (err error) {
 		if err := saveUsage(ctx, client, item, total); err != nil {
 			log.Println("Failed saving usage for", item.Namespace+"/"+item.Name, ":", err.Error())
 		} else {
-			log.Println("Saved usage for", item.Namespace+"/"+item.Name, ":", prettyDiskUsage(total))
+			log.Println("Saved usage for", item.Namespace+"/"+item.Name, ":", formatDiskUsage(total))
 		}
 	}
 
@@ -156,7 +157,7 @@ func saveUsage(ctx context.Context, client *kubernetes.Clientset, item Namespace
 		"metadata": map[string]any{
 			"annotations": map[string]string{
 				KeyEphemeralStorageUsage:       strconv.FormatInt(usage, 10),
-				KeyEphemeralStorageUsagePretty: prettyDiskUsage(usage),
+				KeyEphemeralStorageUsagePretty: formatDiskUsage(usage),
 				KeyEphemeralStorageUpdatedAt:   time.Now().Format(time.RFC3339),
 			},
 		},
